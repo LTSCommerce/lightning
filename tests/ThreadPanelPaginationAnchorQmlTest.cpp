@@ -500,6 +500,69 @@ private Q_SLOTS:
         }
     }
 
+    void aLongThreadRootGrowsToACapThenScrolls()
+    {
+        AppController controller(AppController::MockBackend);
+        QVERIFY(login(controller));
+        auto *mock = controller.findChild<MockMatrixClient *>();
+        QVERIFY(mock != nullptr);
+        const QString rootId = firstThreadRootId(*mock, kGeneral);
+        QVERIFY(!rootId.isEmpty());
+        controller.thread()->openThread(kGeneral, rootId);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.thread()->state(),
+                                  ThreadController::Ready, kSignalTimeoutMs);
+
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("app", &controller);
+        QSignalSpy createdSpy(&engine, &QQmlApplicationEngine::objectCreated);
+        engine.loadFromModule(QStringLiteral("MatrixClient"),
+                              QStringLiteral("ThreadPanel"));
+        if (createdSpy.isEmpty())
+            QVERIFY(createdSpy.wait(kSignalTimeoutMs));
+        auto *root = qobject_cast<QQuickItem *>(
+            createdSpy.at(0).at(0).value<QObject *>());
+        QVERIFY(root != nullptr);
+        QQuickWindow window;
+        window.resize(340, 700);
+        root->setParentItem(window.contentItem());
+        root->setSize(QSizeF(window.width(), window.height()));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window, kSignalTimeoutMs));
+
+        auto *scroll = root->findChild<QQuickItem *>(
+            QStringLiteral("threadRootBodyScroll"));
+        auto *body = root->findChild<QQuickItem *>(QStringLiteral("threadRootBody"));
+        QVERIFY2(scroll && body, "the thread root body has no scroll area");
+
+        QStringList lines;
+        for (int i = 1; i <= 60; ++i)
+            lines << QStringLiteral("Option %1").arg(i);
+        root->setProperty("rootData", QVariantMap{
+            { QStringLiteral("loaded"), true },
+            { QStringLiteral("eventId"), QStringLiteral("$long") },
+            { QStringLiteral("body"), lines.join(QLatin1Char('\n')) } });
+        const qreal cap = root->property("rootBodyMaxHeight").toReal();
+        QTRY_VERIFY(scroll->isVisible());
+        QTRY_VERIFY2(scroll->height() <= cap + 1 && scroll->height() > 0,
+                     qPrintable(QStringLiteral("root body is %1 px, cap %2")
+                                    .arg(scroll->height()).arg(cap)));
+        QVERIFY(!body->property("truncated").toBool());
+        QVERIFY(scroll->property("interactive").toBool());
+        const qreal bottom = scroll->property("contentHeight").toReal()
+                             - scroll->height();
+        QVERIFY(bottom > 0);
+        scroll->setProperty("contentY", bottom);
+        QTRY_COMPARE(scroll->property("contentY").toReal(), bottom);
+
+        root->setProperty("rootData", QVariantMap{
+            { QStringLiteral("loaded"), true },
+            { QStringLiteral("eventId"), QStringLiteral("$short") },
+            { QStringLiteral("body"), QStringLiteral("Short root") } });
+        QTRY_COMPARE(scroll->property("contentY").toReal(), 0.0);
+        QTRY_VERIFY(!scroll->property("interactive").toBool());
+        QTRY_COMPARE(scroll->height(), body->implicitHeight());
+    }
+
     void theThreadRootCollapsesToOneLineAndRemembersIt()
     {
         QSettings().remove(QStringLiteral("timeline/threadRootCollapsed"));

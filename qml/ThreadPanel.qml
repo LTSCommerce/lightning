@@ -100,6 +100,8 @@ Rectangle {
     property var rootData: ({})
     function refreshRoot() { rootData = app.thread.rootInfo() }
     readonly property bool rootCollapsed: app.settings.threadRootCollapsed === true
+    readonly property real rootBodyMaxHeight:
+        Math.max(AppTheme.scaled(120), Math.round(height * 0.4))
     function setRootCollapsed(collapsed) {
         app.settings.threadRootCollapsed = collapsed
     }
@@ -646,8 +648,7 @@ Rectangle {
             Layout.topMargin: AppTheme.spacing12
             visible: app.thread.active
                      && app.thread.state !== ThreadController.Failed
-            implicitHeight: Math.min(rootColumn.implicitHeight
-                                     + AppTheme.spacing12 * 2, 190)
+            implicitHeight: rootColumn.implicitHeight + AppTheme.spacing12 * 2
             clip: true
             radius: AppTheme.radiusLg
             readonly property bool navigationHighlighted:
@@ -835,24 +836,38 @@ Rectangle {
                         onClicked: panel.setRootCollapsed(false)
                     }
                 }
-                Label {
-                    objectName: "threadRootBody"
-                    textFormat: Text.PlainText
+                Flickable {
+                    id: rootBodyFlick
+                    objectName: "threadRootBodyScroll"
                     Layout.fillWidth: true
                     Layout.maximumWidth: rootColumn.width
+                    Layout.preferredHeight: Math.min(rootBody.implicitHeight,
+                                                     panel.rootBodyMaxHeight)
                     visible: panel.rootData.loaded === true && !panel.rootCollapsed
-                    text: panel.rootBodyText
-                    font.italic: panel.rootData.redacted === true
-                                 || panel.rootData.undecryptable === true
-                    color: (panel.rootData.redacted === true
-                            || panel.rootData.undecryptable === true)
-                           ? AppTheme.textMuted : AppTheme.text
-                    font.pixelSize: AppTheme.scaled(AppTheme.textBody)
-                    lineHeight: AppTheme.lineHeightBody
-                    lineHeightMode: Text.ProportionalHeight
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 6
-                    elide: Text.ElideRight
+                    contentWidth: width
+                    contentHeight: rootBody.implicitHeight
+                    interactive: contentHeight > height
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+                    readonly property string shownRootId: panel.rootData.eventId || ""
+                    onShownRootIdChanged: contentY = 0
+                    Label {
+                        id: rootBody
+                        objectName: "threadRootBody"
+                        textFormat: Text.PlainText
+                        width: rootBodyFlick.width
+                        text: panel.rootBodyText
+                        font.italic: panel.rootData.redacted === true
+                                     || panel.rootData.undecryptable === true
+                        color: (panel.rootData.redacted === true
+                                || panel.rootData.undecryptable === true)
+                               ? AppTheme.textMuted : AppTheme.text
+                        font.pixelSize: AppTheme.scaled(AppTheme.textBody)
+                        lineHeight: AppTheme.lineHeightBody
+                        lineHeightMode: Text.ProportionalHeight
+                        wrapMode: Text.Wrap
+                    }
+                    ScrollBar.vertical: AppScrollBar { policy: ScrollBar.AsNeeded }
                 }
                 Label {
                     objectName: "threadRootMissing"
