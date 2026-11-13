@@ -743,3 +743,18 @@ build-windows-amd64:
       - dist/windows/signing-payload/*.sha256
       - dist/version.env
       - dist/source-info.json
+
+build-macos-arm64:
+  rules:
+    - if: '$PACKAGE_LANE == "1" && $PACKAGE_ARCH =~ /^(all|arm64)$/ && $PACKAGE_FORMATS =~ /^all$|(^|,)macos(,|$)/'
+  stage: build
+  image: macos-26-xcode-26
+  tags: [saas-macos-medium-m1]
+  timeout: 20m
+  needs: []
+  script:
+    - sw_vers; uname -m; xcode-select -p; xcodebuild -version || true
+    - sysctl -n hw.ncpu hw.memsize; df -h / "$HOME" "$CI_PROJECT_DIR"
+    - brew --version; brew --prefix
+    - brew list --versions qt openssl@3 cmake ninja pkgconf pkg-config || true
+    - command -v rustup cargo rustc cmake ninja pkg-config macdeployqt || true
